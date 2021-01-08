@@ -3,9 +3,7 @@ name: deploiement compte de stockage
 on:
   push:
     branches:
-      - dev
-    Paths:
-      - "ARM/**"      
+      - dev     
 
 env:
   AZURE_RG: RG-github-ARM-Stockage

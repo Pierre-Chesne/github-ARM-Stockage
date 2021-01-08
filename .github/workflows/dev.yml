@@ -9,37 +9,54 @@ on:
 
 env:
   AZURE_RG: RG-github-ARM-Stockage
+  AZURE_RG_TEST: RG-Test-ARM-Template
   AZURE_LOCATION: westeurope
 
 jobs:
   
-  deploy:
+  build:
     
-    runs-on: ubuntu-latest
+    runs-on: windows-2019
     
     steps:
-    - name: Azure Login Az Cli
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Recuperation du repo
+        uses: actions/checkout@v2
 
-    - name: Creation du RG
-      uses: azure/CLI@v1
-      with:
-        azcliversion: 2.0.72
-        inlineScript: |
-          az group create --name ${{ env.AZURE_RG }} --location ${{ env.AZURE_LOCATION }}           
-    
-    - name: Git - recuperation des fichiers du repo
-      uses: actions/checkout@v2
+      - name: Azure Login
+        uses: Azure/login@v1
+        with:    
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: true
 
-    - name: Deploiement du template ARM
-      uses: azure/arm-deploy@v1
-      with:
-        scope: resourcegroup
-        subscriptionId: ${{ secrets.AZURE_IDSUBSCRIPTION }}
-        resourceGroupName: ${{ env.AZURE_RG }}
-        template: ./ARM/azuredeploy.json
-        parameters: ./ARM/azuredeploy.parameters.json
-        deploymentName: Deployment-001
-        deploymentMode: Incremental
+      - name: Creation du RG pour le check du template ARM
+        uses: Azure/powershell@v1
+        with:
+          inlineScript: |
+              New-AzResourceGroup -Name ${{ env.AZURE_RG_TEST }} -Location ${{ env.AZURE_LOCATION }} -Force            
+          azPSVersion: '3.1.0'
+
+      - name: Check Template ARM
+        uses: Azure/powershell@v1
+        with:
+          inlineScript: |
+            $Parameters = @{
+              ResourcegroupName     = "${{ env.AZURE_RG_TEST }}"
+              Templatefile          = ".\ARM\azuredeploy.json"
+              TemplateParameterfile = ".\ARM\azuredeploy.parameters.json"
+              mode                  = "Incremental"
+            }
+            $Result = Get-AzResourceGroupDeploymentWhatIfResult @Parameters
+            $result
+          azPSVersion: '3.1.0'
+
+      - name: copy artifact
+        shell: pwsh
+        run: |
+          mkdir .\templateArtifacts
+          copy-item .\ARM\*.* .\templateArtifacts
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: ARM Template
+          path: templateArtifacts/
